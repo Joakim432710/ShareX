@@ -32,6 +32,7 @@ using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -1728,6 +1729,11 @@ namespace ShareX.ScreenCaptureLib
 
         public void DrawRegionArea(Graphics g, Rectangle rect, bool isAnimated, bool showAreaInfo = false)
         {
+            throw new Exception("Cannot draw with GDI object");
+        }
+
+        public void DrawRegionArea(D2DGraphics g, Rectangle rect, bool isAnimated, bool showAreaInfo = false)
+        {
             Form.DrawRegionArea(g, rect, isAnimated);
 
             if (showAreaInfo)
@@ -1886,7 +1892,7 @@ namespace ShareX.ScreenCaptureLib
             InsertImage(bmp);
         }
 
-        private void InsertImage(Image img)
+        private void InsertImage(Bitmap img)
         {
             if (img != null)
             {

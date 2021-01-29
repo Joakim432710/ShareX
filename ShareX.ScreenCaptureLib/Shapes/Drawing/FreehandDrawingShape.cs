@@ -29,6 +29,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -77,7 +78,7 @@ namespace ShareX.ScreenCaptureLib
                 }
                 else
                 {
-                    Point pos = InputManager.ClientMousePosition;
+                    var pos = InputManager.ClientMousePosition;
 
                     if (positions.Count == 0 || (!Manager.IsProportionalResizing && LastPosition != pos))
                     {
@@ -110,6 +111,11 @@ namespace ShareX.ScreenCaptureLib
             DrawFreehand(g);
         }
 
+        public override void OnDraw(D2DGraphics g)
+        {
+            DrawFreehand(g);
+        }
+
         protected void DrawFreehand(Graphics g)
         {
             int borderSize = Math.Max(BorderSize, 1);
@@ -120,6 +126,37 @@ namespace ShareX.ScreenCaptureLib
             }
 
             DrawFreehand(g, BorderColor, borderSize, BorderStyle, positions.ToArray());
+        }
+
+        protected void DrawFreehand(D2DGraphics g)
+        {
+            var borderSize = Math.Max(BorderSize, 1);
+
+            if (Shadow)
+            {
+                DrawFreehand(g, ShadowColor, borderSize, BorderStyle, positions.Select(x => x.Add(ShadowOffset)).ToArray());
+            }
+
+            DrawFreehand(g, BorderColor, borderSize, BorderStyle, positions.ToArray());
+        }
+
+        protected void DrawFreehand(D2DGraphics g, Color borderColor, int borderSize, BorderStyle borderStyle, Point[] points)
+        {
+            if (points.Length > 0 && borderSize > 0 && borderColor.A > 0)
+            {
+                if (points.Length == 1)
+                {
+                    var rect = new Rectangle((int)(points[0].X - (borderSize / 2f)), (int)(points[0].Y - (borderSize / 2f)), borderSize, borderSize);
+                    var center = rect.Center();
+                    var radius = rect.Right - center.X;
+                    var ellipse = new D2DEllipse(center, radius, radius);
+                    g.FillEllipse(ellipse, borderColor.ToD2DColor());
+                }
+                else
+                {
+                    g.DrawLines(points.Select(s => (D2DPoint)s).ToArray(), borderColor.ToD2DColor(), borderSize, borderStyle.ToD2DDashStyle());
+                }
+            }
         }
 
         protected void DrawFreehand(Graphics g, Color borderColor, int borderSize, BorderStyle borderStyle, Point[] points)

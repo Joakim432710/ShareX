@@ -27,6 +27,8 @@ using ShareX.HelpersLib;
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Linq;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -135,7 +137,31 @@ namespace ShareX.ScreenCaptureLib
             DrawLine(g);
         }
 
+        public override void OnDraw(D2DGraphics g)
+        {
+            DrawLine(g);
+        }
+
         protected void DrawLine(Graphics g)
+        {
+            int borderSize = Math.Max(BorderSize, 1);
+
+            if (Shadow)
+            {
+                Point[] shadowPoints = new Point[Points.Length];
+
+                for (int i = 0; i < shadowPoints.Length; i++)
+                {
+                    shadowPoints[i] = Points[i].Add(ShadowOffset);
+                }
+
+                DrawLine(g, ShadowColor, borderSize, BorderStyle, shadowPoints);
+            }
+
+            DrawLine(g, BorderColor, borderSize, BorderStyle, Points);
+        }
+
+        protected void DrawLine(D2DGraphics g)
         {
             int borderSize = Math.Max(BorderSize, 1);
 
@@ -179,6 +205,24 @@ namespace ShareX.ScreenCaptureLib
 
                 g.SmoothingMode = SmoothingMode.None;
                 g.PixelOffsetMode = PixelOffsetMode.Default;
+            }
+        }
+
+        protected void DrawLine(D2DGraphics g, Color borderColor, int borderSize, BorderStyle borderStyle, Point[] points)
+        {
+            if (borderSize > 0 && borderColor.A > 0)
+            {
+                using (Pen pen = CreatePen(borderColor, borderSize, borderStyle))
+                {
+                    if (CenterNodeActive && points.Length > 2)
+                    {
+                        g.DrawLines(points.Select(s => new D2DPoint(s.X, s.Y)).ToArray(), borderColor.ToD2DColor(), borderSize, borderStyle.ToD2DDashStyle());
+                    }
+                    else
+                    {
+                        g.DrawLine(points[0], points[points.Length - 1], borderColor.ToD2DColor(), borderSize, borderStyle.ToD2DDashStyle());
+                    }
+                }
             }
         }
 

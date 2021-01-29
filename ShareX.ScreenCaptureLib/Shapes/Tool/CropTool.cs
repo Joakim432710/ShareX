@@ -26,6 +26,7 @@
 using ShareX.HelpersLib;
 using System.Drawing;
 using System.Windows.Forms;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -70,6 +71,15 @@ namespace ShareX.ScreenCaptureLib
             {
                 Manager.DrawRegionArea(g, Rectangle, true, Manager.Options.ShowInfo);
                 g.DrawCross(Pens.Black, Rectangle.Center(), 10);
+            }
+        }
+
+        public override void OnDraw(D2DGraphics g)
+        {
+            if (IsValidShape)
+            {
+                Manager.DrawRegionArea(g, Rectangle, true, Manager.Options.ShowInfo);
+                g.DrawCross(D2DColor.Black, Rectangle.Center(), 10);
             }
         }
 

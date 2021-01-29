@@ -24,6 +24,7 @@
 #endregion License Information (GPL v3)
 
 using System.Drawing;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -32,6 +33,9 @@ namespace ShareX.ScreenCaptureLib
         public override ShapeCategory ShapeCategory { get; } = ShapeCategory.Tool;
 
         public virtual void OnDraw(Graphics g)
+        {
+        }
+        public virtual void OnDraw(D2DGraphics g)
         {
         }
     }

@@ -24,6 +24,7 @@
 #endregion License Information (GPL v3)
 
 using System.Drawing;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -76,6 +77,22 @@ namespace ShareX.ScreenCaptureLib
             {
                 g.FillRectangle(brush, Rectangle);
             }
+        }
+
+        public override void OnDraw(D2DGraphics g)
+        {
+            Color color;
+
+            if (!Manager.IsRenderingOutput && !eraserDimmedColor.IsEmpty)
+            {
+                color = eraserDimmedColor;
+            }
+            else
+            {
+                color = eraserColor;
+            }
+
+            g.FillRectangle(Rectangle, color.ToD2DColor());
         }
     }
 }

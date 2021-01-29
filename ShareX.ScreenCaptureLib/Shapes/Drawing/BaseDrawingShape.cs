@@ -24,6 +24,7 @@
 #endregion License Information (GPL v3)
 
 using System.Drawing;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -67,5 +68,6 @@ namespace ShareX.ScreenCaptureLib
         }
 
         public abstract void OnDraw(Graphics g);
+        public abstract void OnDraw(D2DGraphics g);
     }
 }

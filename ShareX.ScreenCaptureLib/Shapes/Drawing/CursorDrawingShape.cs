@@ -25,6 +25,7 @@
 
 using System;
 using System.Drawing;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -58,6 +59,19 @@ namespace ShareX.ScreenCaptureLib
             if (Image != null)
             {
                 g.DrawImage(Image, Rectangle);
+
+                if (!Manager.IsRenderingOutput && Manager.CurrentTool == ShapeType.DrawingCursor)
+                {
+                    Manager.DrawRegionArea(g, Rectangle, false);
+                }
+            }
+        }
+
+        public override void OnDraw(D2DGraphics g)
+        {
+            if (Image != null)
+            {
+                g.DrawGDIBitmap(Image.GetHbitmap(), Rectangle, new D2DRect(0, 0, Image.Width, Image.Height));
 
                 if (!Manager.IsRenderingOutput && Manager.CurrentTool == ShapeType.DrawingCursor)
                 {

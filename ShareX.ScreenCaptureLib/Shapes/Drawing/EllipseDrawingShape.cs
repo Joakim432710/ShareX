@@ -26,6 +26,7 @@
 using ShareX.HelpersLib;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -38,7 +39,29 @@ namespace ShareX.ScreenCaptureLib
             DrawEllipse(g);
         }
 
+        public override void OnDraw(D2DGraphics g)
+        {
+            DrawEllipse(g);
+        }
+
         protected void DrawEllipse(Graphics g)
+        {
+            if (Shadow)
+            {
+                if (IsBorderVisible)
+                {
+                    DrawEllipse(g, ShadowColor, BorderSize, BorderStyle, Color.Transparent, Rectangle.LocationOffset(ShadowOffset));
+                }
+                else if (FillColor.A == 255)
+                {
+                    DrawEllipse(g, Color.Transparent, 0, BorderStyle, ShadowColor, Rectangle.LocationOffset(ShadowOffset));
+                }
+            }
+
+            DrawEllipse(g, BorderColor, BorderSize, BorderStyle, FillColor, Rectangle);
+        }
+
+        protected void DrawEllipse(D2DGraphics g)
         {
             if (Shadow)
             {
@@ -78,6 +101,23 @@ namespace ShareX.ScreenCaptureLib
             }
 
             g.SmoothingMode = SmoothingMode.None;
+        }
+
+        protected void DrawEllipse(D2DGraphics g, Color borderColor, int borderSize, BorderStyle borderStyle, Color fillColor, Rectangle rect)
+        {
+            var center = rect.Center();
+            var radius = rect.Right - center.X;
+            var ellipse = new D2DEllipse(center, radius, radius);
+
+            if (fillColor.A > 0)
+            {
+                g.FillEllipse(ellipse, fillColor.ToD2DColor());
+            }
+
+            if (borderSize > 0 && borderColor.A > 0)
+            {
+                g.DrawEllipse(ellipse, borderColor.ToD2DColor(), borderSize, borderStyle.ToD2DDashStyle());
+            }
         }
 
         public override void OnShapePathRequested(GraphicsPath gp, Rectangle rect)

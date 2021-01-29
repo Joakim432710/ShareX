@@ -33,10 +33,18 @@ using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using unvell.D2DLib;
+using unvell.D2DLib.WinForm;
+using Bitmap = System.Drawing.Bitmap;
+using Brush = System.Drawing.Brush;
+using FillMode = System.Drawing.Drawing2D.FillMode;
+using Image = System.Drawing.Image;
+using InterpolationMode = System.Drawing.Drawing2D.InterpolationMode;
+using PixelFormat = System.Drawing.Imaging.PixelFormat;
 
 namespace ShareX.ScreenCaptureLib
 {
-    public sealed class RegionCaptureForm : Form
+    public sealed class RegionCaptureForm : CustomD2DForm
     {
         public static GraphicsPath LastRegionFillPath { get; private set; }
 
@@ -76,10 +84,10 @@ namespace ShareX.ScreenCaptureLib
         internal int ToolbarHeight;
 
         private InputManager InputManager => ShapeManager.InputManager;
-        private TextureBrush backgroundBrush, backgroundHighlightBrush;
+        private TextureBrush backgroundBrush;
         private GraphicsPath regionFillPath, regionDrawPath;
-        private Pen borderPen, borderDotPen, borderDotStaticPen, textOuterBorderPen, textInnerBorderPen, markerPen, canvasBorderPen;
-        private Brush textBrush, textShadowBrush, textBackgroundBrush;
+        private D2DPen borderDotPen, borderDotStaticPen, textOuterBorderPen, textInnerBorderPen, markerPen, canvasBorderPen;
+
         private Font infoFont, infoFontMedium, infoFontBig;
         private Stopwatch timerStart, timerFPS;
         private int frameCount;
@@ -87,12 +95,19 @@ namespace ShareX.ScreenCaptureLib
         private RectangleAnimation regionAnimation;
         private TextAnimation editorPanTipAnimation;
         private Cursor defaultCursor, openHandCursor, closedHandCursor;
-        private Color canvasBackgroundColor, canvasBorderColor, textColor, textShadowColor, textBackgroundColor, textOuterBorderColor, textInnerBorderColor;
+        private D2DColor canvasBackgroundColor, canvasBorderColor, textColor, textShadowColor, textBackgroundColor, textOuterBorderColor, textInnerBorderColor, borderColor, borderDotColor;
+        private DateTime lastFpsUpdate;
+        private int lastFps;
+        private int currentFps;
 
         public RegionCaptureForm(RegionCaptureMode mode, RegionCaptureOptions options, Bitmap canvas = null)
         {
+            ShowInTaskbar = false;
+            AnimationDraw = true;
             Mode = mode;
             Options = options;
+            ShowFPS = true;
+            Font = new Font(Font.FontFamily, 25, Font.Style);
 
             if (canvas == null)
             {
@@ -120,42 +135,39 @@ namespace ShareX.ScreenCaptureLib
                     Text = Resources.RegionCaptureForm_TipYouCanPanImageByHoldingMouseMiddleButtonAndDragging
                 };
             }
-
-            borderPen = new Pen(Color.Black);
-            borderDotPen = new Pen(Color.White) { DashPattern = new float[] { 5, 5 } };
-            borderDotStaticPen = new Pen(Color.White) { DashPattern = new float[] { 5, 5 } };
+            
+            borderColor = D2DColor.Black;
+            borderDotPen = Device.CreatePen(D2DColor.White, D2DDashStyle.Custom, customDashes: new float[] {5, 5});
+            borderDotStaticPen = Device.CreatePen(D2DColor.White, customDashes: new float[] {5, 5});
             infoFont = new Font("Verdana", 9);
             infoFontMedium = new Font("Verdana", 12);
             infoFontBig = new Font("Verdana", 16, FontStyle.Bold);
-            markerPen = new Pen(Color.FromArgb(200, Color.Red));
+            markerPen = Device.CreatePen(new D2DColor(200, D2DColor.Red));
 
             if (ShareXResources.UseCustomTheme)
             {
-                canvasBackgroundColor = ShareXResources.Theme.BackgroundColor;
-                canvasBorderColor = ShareXResources.Theme.BorderColor;
-                textColor = ShareXResources.Theme.TextColor;
-                textShadowColor = ShareXResources.Theme.BorderColor;
-                textBackgroundColor = Color.FromArgb(200, ShareXResources.Theme.BackgroundColor);
-                textOuterBorderColor = Color.FromArgb(200, ShareXResources.Theme.SeparatorDarkColor);
-                textInnerBorderColor = Color.FromArgb(200, ShareXResources.Theme.SeparatorLightColor);
+                canvasBackgroundColor = D2DColor.FromGDIColor(ShareXResources.Theme.BackgroundColor);
+                canvasBorderColor = D2DColor.FromGDIColor(ShareXResources.Theme.BorderColor);
+                textColor = D2DColor.FromGDIColor(ShareXResources.Theme.TextColor);
+                textShadowColor = D2DColor.FromGDIColor(ShareXResources.Theme.BorderColor);
+                textBackgroundColor = D2DColor.FromGDIColor(Color.FromArgb(200, ShareXResources.Theme.BackgroundColor));
+                textOuterBorderColor = D2DColor.FromGDIColor(Color.FromArgb(200, ShareXResources.Theme.SeparatorDarkColor));
+                textInnerBorderColor = D2DColor.FromGDIColor(Color.FromArgb(200, ShareXResources.Theme.SeparatorLightColor));
             }
             else
             {
-                canvasBackgroundColor = Color.FromArgb(200, 200, 200);
-                canvasBorderColor = Color.FromArgb(176, 176, 176);
-                textColor = Color.White;
-                textShadowColor = Color.Black;
-                textBackgroundColor = Color.FromArgb(200, Color.FromArgb(42, 131, 199));
-                textOuterBorderColor = Color.FromArgb(200, Color.White);
-                textInnerBorderColor = Color.FromArgb(200, Color.FromArgb(0, 81, 145));
+                canvasBackgroundColor = D2DColor.FromGDIColor(Color.FromArgb(200, 200, 200));
+                canvasBorderColor = D2DColor.FromGDIColor(Color.FromArgb(176, 176, 176));
+                textColor = D2DColor.FromGDIColor(Color.White);
+                textShadowColor = D2DColor.FromGDIColor(Color.Black);
+                textBackgroundColor = D2DColor.FromGDIColor(Color.FromArgb(200, Color.FromArgb(42, 131, 199)));
+                textOuterBorderColor = D2DColor.FromGDIColor(Color.FromArgb(200, Color.White));
+                textInnerBorderColor = D2DColor.FromGDIColor(Color.FromArgb(200, Color.FromArgb(0, 81, 145)));
             }
 
-            canvasBorderPen = new Pen(canvasBorderColor);
-            textBrush = new SolidBrush(textColor);
-            textShadowBrush = new SolidBrush(textShadowColor);
-            textBackgroundBrush = new SolidBrush(textBackgroundColor);
-            textOuterBorderPen = new Pen(textOuterBorderColor);
-            textInnerBorderPen = new Pen(textInnerBorderColor);
+            canvasBorderPen = Device.CreatePen(canvasBorderColor);
+            textOuterBorderPen = Device.CreatePen(textOuterBorderColor);
+            textInnerBorderPen = Device.CreatePen(textInnerBorderColor);
 
             Prepare(canvas);
 
@@ -172,7 +184,7 @@ namespace ShareX.ScreenCaptureLib
             closedHandCursor = Helpers.CreateCursor(Resources.closedhand);
             SetDefaultCursor();
             Icon = ShareXResources.Icon;
-            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint, true);
+            //SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint, true);
             UpdateTitle();
             StartPosition = FormStartPosition.Manual;
 
@@ -180,7 +192,6 @@ namespace ShareX.ScreenCaptureLib
             {
                 FormBorderStyle = FormBorderStyle.None;
                 Bounds = CaptureHelpers.GetScreenBounds();
-                ShowInTaskbar = false;
 #if !DEBUG
                 TopMost = true;
 #endif
@@ -196,7 +207,7 @@ namespace ShareX.ScreenCaptureLib
                 }
                 else
                 {
-                    Rectangle activeScreenWorkingArea = CaptureHelpers.GetActiveScreenWorkingArea();
+                    D2DRect activeScreenWorkingArea = CaptureHelpers.GetActiveScreenWorkingArea();
                     Size size = new Size(900, 700);
                     bool isMaximized = Options.ImageEditorStartMode == ImageEditorStartMode.Maximized;
 
@@ -217,8 +228,8 @@ namespace ShareX.ScreenCaptureLib
                         }
                     }
 
-                    Bounds = new Rectangle(activeScreenWorkingArea.X + (activeScreenWorkingArea.Width / 2) - (size.Width / 2),
-                        activeScreenWorkingArea.Y + (activeScreenWorkingArea.Height / 2) - (size.Height / 2), size.Width, size.Height);
+                    Bounds = new Rectangle((int)(activeScreenWorkingArea.X + (activeScreenWorkingArea.Width / 2) - (size.Width / 2)),
+                        (int)(activeScreenWorkingArea.Y + (activeScreenWorkingArea.Height / 2) - (size.Height / 2)), size.Width, size.Height);
 
                     if (isMaximized)
                     {
@@ -241,8 +252,15 @@ namespace ShareX.ScreenCaptureLib
             LostFocus += RegionCaptureForm_LostFocus;
             GotFocus += RegionCaptureForm_GotFocus;
             FormClosing += RegionCaptureForm_FormClosing;
+            MouseMove += OnMouseMove;
 
             ResumeLayout(false);
+        }
+
+        private Point lastMousePoint = new Point();
+        private void OnMouseMove(object sender, MouseEventArgs e)
+        {
+            lastMousePoint = e.Location;
         }
 
         internal void UpdateTitle()
@@ -306,7 +324,6 @@ namespace ShareX.ScreenCaptureLib
         {
             if (Canvas != null) Canvas.Dispose();
             if (backgroundBrush != null) backgroundBrush.Dispose();
-            if (backgroundHighlightBrush != null) backgroundHighlightBrush.Dispose();
 
             Canvas = canvas;
 
@@ -319,7 +336,7 @@ namespace ShareX.ScreenCaptureLib
                 using (Bitmap background = new Bitmap(Canvas.Width, Canvas.Height))
                 using (Graphics g = Graphics.FromImage(background))
                 {
-                    Rectangle sourceRect = new Rectangle(0, 0, Canvas.Width, Canvas.Height);
+                    var sourceRect = new D2DRect(0, 0, Canvas.Width, Canvas.Height);
 
                     if (ShareXResources.Theme.CheckerSize > 0)
                     {
@@ -348,25 +365,12 @@ namespace ShareX.ScreenCaptureLib
                     CenterCanvas();
                 }
             }
-            else if (Options.UseDimming)
-            {
-                DimmedCanvas?.Dispose();
-                DimmedCanvas = (Bitmap)Canvas.Clone();
-
-                using (Graphics g = Graphics.FromImage(DimmedCanvas))
-                using (Brush brush = new SolidBrush(Color.FromArgb(30, Color.Black)))
-                {
-                    g.FillRectangle(brush, 0, 0, DimmedCanvas.Width, DimmedCanvas.Height);
-
-                    backgroundBrush = new TextureBrush(DimmedCanvas) { WrapMode = WrapMode.Clamp };
-                }
-
-                backgroundHighlightBrush = new TextureBrush(Canvas) { WrapMode = WrapMode.Clamp };
-            }
             else
             {
                 backgroundBrush = new TextureBrush(Canvas) { WrapMode = WrapMode.Clamp };
             }
+
+            BackgroundImage = Device.CreateBitmapFromGDIBitmap(canvas, true);
         }
 
         private void OnMoved()
@@ -391,18 +395,18 @@ namespace ShareX.ScreenCaptureLib
                 PanningStrech.Y -= deltaY;
             }
 
-            Size panLimitSize = new Size(
+            var panLimitSize = new D2DSize(
                 Math.Min((int)Math.Round(ClientArea.Width * 0.25f), CanvasRectangle.Width),
                 Math.Min((int)Math.Round(ClientArea.Height * 0.25f), CanvasRectangle.Height));
 
-            Rectangle limitRectangle = new Rectangle(
-                ClientArea.X + panLimitSize.Width, ClientArea.Y + panLimitSize.Height,
-                ClientArea.Width - (panLimitSize.Width * 2), ClientArea.Height - (panLimitSize.Height * 2));
+            var limitRectangle = new D2DRect(
+                ClientArea.X + panLimitSize.width, ClientArea.Y + panLimitSize.height,
+                ClientArea.Width - (panLimitSize.width * 2), ClientArea.Height - (panLimitSize.height * 2));
 
-            deltaX = Math.Max(deltaX, limitRectangle.Left - CanvasRectangle.Right);
-            deltaX = Math.Min(deltaX, limitRectangle.Right - CanvasRectangle.Left);
-            deltaY = Math.Max(deltaY, limitRectangle.Top - CanvasRectangle.Bottom);
-            deltaY = Math.Min(deltaY, limitRectangle.Bottom - CanvasRectangle.Top);
+            deltaX = (int)Math.Max(deltaX, limitRectangle.X - CanvasRectangle.Width);
+            deltaX = (int)Math.Min(deltaX, limitRectangle.Width - CanvasRectangle.X);
+            deltaY = (int)Math.Max(deltaY, limitRectangle.Y - CanvasRectangle.Height);
+            deltaY = (int)Math.Min(deltaY, limitRectangle.Height - CanvasRectangle.Y);
 
             if (usePanningStretch)
             {
@@ -417,15 +421,8 @@ namespace ShareX.ScreenCaptureLib
 
             CanvasRectangle = CanvasRectangle.LocationOffset(deltaX, deltaY);
 
-            if (backgroundBrush != null)
-            {
-                backgroundBrush.TranslateTransform(deltaX, deltaY);
-            }
-
-            if (ShapeManager != null)
-            {
-                ShapeManager.MoveAll(deltaX, deltaY);
-            }
+            backgroundBrush?.TranslateTransform(deltaX, deltaY);
+            ShapeManager?.MoveAll(deltaX, deltaY);
         }
 
         private void Pan(Point delta)
@@ -439,10 +436,10 @@ namespace ShareX.ScreenCaptureLib
             {
                 int x = (int)Math.Round((ClientArea.Width * 0.5f) + centerOffset.X);
                 int y = (int)Math.Round((ClientArea.Height * 0.5f) + centerOffset.Y);
-                int newX = x - (CanvasRectangle.Width / 2);
-                int newY = y - (CanvasRectangle.Height / 2);
-                int deltaX = newX - CanvasRectangle.X;
-                int deltaY = newY - CanvasRectangle.Y;
+                int newX = (int) (x - (CanvasRectangle.Width / 2));
+                int newY = (int) (y - (CanvasRectangle.Height / 2));
+                int deltaX = (int) (newX - CanvasRectangle.X);
+                int deltaY = (int) (newY - CanvasRectangle.Y);
                 Pan(deltaX, deltaY, false);
             }
         }
@@ -715,32 +712,34 @@ namespace ShareX.ScreenCaptureLib
 
             if (Options.EnableAnimations)
             {
-                borderDotPen.DashOffset = (float)timerStart.Elapsed.TotalSeconds * -15;
+                borderDotPen = Device.CreatePen(borderDotPen.Color, borderDotPen.DashStyle, borderDotPen.CustomDashes, (float)timerStart.Elapsed.TotalSeconds * -15);
             }
 
             ShapeManager.Update();
         }
 
-        protected override void OnPaintBackground(PaintEventArgs e)
+        protected override void OnRender(D2DGraphics g)
         {
-            //base.OnPaintBackground(e);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            Update();
-
-            Graphics g = e.Graphics;
-
-            if (IsEditorMode && !CanvasRectangle.Contains(ClientArea))
+            if (Options.UseDimming)
             {
-                g.Clear(canvasBackgroundColor);
-                g.DrawRectangleProper(canvasBorderPen, CanvasRectangle.Offset(1));
+                var rtArea = RenderTargetArea;
+                g.FillRectangle(0, 0, rtArea.Width, rtArea.Height, new D2DColor(30f/255f, D2DColor.Black));
             }
 
-            g.CompositingMode = CompositingMode.SourceCopy;
-            g.FillRectangle(backgroundBrush, CanvasRectangle);
-            g.CompositingMode = CompositingMode.SourceOver;
+            Update();
+
+            if (IsEditorMode && !((RectangleF)CanvasRectangle).Contains(ClientArea))
+            {
+                g.Clear(canvasBackgroundColor);
+                var rect = CanvasRectangle.Offset(1);
+                g.DrawRectangle(new D2DRect(rect.X, rect.Y, rect.Width, rect.Height), canvasBorderPen);
+            }
+
+            //g.FillRectangle(CanvasRectangle, backgroundBrush);
+
+            //g.CompositingMode = CompositingMode.SourceCopy;
+            //g.FillRectangle(backgroundBrush, CanvasRectangle);
+            //g.CompositingMode = CompositingMode.SourceOver;
 
             Draw(g);
 
@@ -760,7 +759,20 @@ namespace ShareX.ScreenCaptureLib
             }
         }
 
-        private void Draw(Graphics g)
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            base.OnPaintBackground(e);
+            //base.OnPaintBackground(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            return;
+            
+        }
+
+        private void Draw(D2DGraphics g)
         {
             // Draw snap rectangles
             if (ShapeManager.IsCreating && ShapeManager.IsSnapResizing)
@@ -771,16 +783,18 @@ namespace ShareX.ScreenCaptureLib
                 {
                     foreach (Size size in Options.SnapSizes)
                     {
-                        Rectangle snapRect = CaptureHelpers.CalculateNewRectangle(shape.StartPosition, shape.EndPosition, size);
+                        D2DRect snapRect = CaptureHelpers.CalculateNewRectangle(shape.StartPosition, shape.EndPosition, size);
                         g.DrawRectangleProper(markerPen, snapRect);
                     }
                 }
             }
 
             List<BaseShape> areas = ShapeManager.ValidRegions.ToList();
-
+            
+            //TODO: Fix this
             if (areas.Count > 0)
             {
+
                 // Create graphics path from all regions
                 UpdateRegionPath();
 
@@ -789,14 +803,14 @@ namespace ShareX.ScreenCaptureLib
                 {
                     using (Region region = new Region(regionDrawPath))
                     {
-                        g.Clip = region;
-                        g.FillRectangle(backgroundHighlightBrush, ClientArea);
-                        g.ResetClip();
+                        var bounds = regionDrawPath.GetBounds();
+                        g.DrawBitmap(BackgroundImage, bounds, bounds);
                     }
                 }
 
-                g.DrawPath(borderPen, regionDrawPath);
-                g.DrawPath(borderDotStaticPen, regionDrawPath);
+                var geometry = regionDrawPath.GetPathGeometry(g.Device);
+                g.DrawPath(geometry, borderColor);
+                g.DrawPath(geometry, borderDotPen);
             }
 
             // Draw effect shapes
@@ -805,13 +819,13 @@ namespace ShareX.ScreenCaptureLib
                 effectShape.OnDraw(g);
             }
 
-            // Draw drawing shapes
+            //// Draw drawing shapes
             foreach (BaseDrawingShape drawingShape in ShapeManager.DrawingShapes)
             {
                 drawingShape.OnDraw(g);
             }
 
-            // Draw tools
+            //// Draw tools
             foreach (BaseTool toolShape in ShapeManager.ToolShapes)
             {
                 toolShape.OnDraw(g);
@@ -851,8 +865,8 @@ namespace ShareX.ScreenCaptureLib
                         ShapeManager.CurrentHoverShape.AddShapePath(hoverDrawPath, -1);
                     }
 
-                    g.DrawPath(borderPen, hoverDrawPath);
-                    g.DrawPath(borderDotPen, hoverDrawPath);
+                    //g.DrawPath(borderPen, hoverDrawPath);
+                    //g.DrawPath(borderDotPen, hoverDrawPath);
                 }
             }
 
@@ -861,15 +875,13 @@ namespace ShareX.ScreenCaptureLib
             {
                 if (Mode == RegionCaptureMode.Ruler)
                 {
-                    using (SolidBrush brush = new SolidBrush(Color.FromArgb(50, 255, 255, 255)))
-                    {
-                        g.FillRectangle(brush, ShapeManager.CurrentRectangle);
-                    }
+                    var rectColor = new D2DColor(50, D2DColor.White);
+                    g.FillRectangle(ShapeManager.CurrentRectangle, rectColor);
 
-                    DrawRuler(g, ShapeManager.CurrentRectangle, borderPen, 5, 10);
-                    DrawRuler(g, ShapeManager.CurrentRectangle, borderPen, 15, 100);
+                    DrawRuler(g, ShapeManager.CurrentRectangle, borderColor, 5, 10);
+                    DrawRuler(g, ShapeManager.CurrentRectangle, borderColor, 15, 100);
 
-                    g.DrawCross(borderPen, ShapeManager.CurrentRectangle.Center(), 10);
+                    g.DrawCross(borderColor, ShapeManager.CurrentRectangle.Center(), 10);
                 }
 
                 DrawRegionArea(g, ShapeManager.CurrentRectangle, true);
@@ -895,7 +907,7 @@ namespace ShareX.ScreenCaptureLib
             }
 
             // Draw resize nodes
-            ShapeManager.DrawObjects(g);
+            //ShapeManager.DrawObjects(g);
 
             // Draw magnifier
             if (Options.ShowMagnifier || Options.ShowInfo)
@@ -922,18 +934,15 @@ namespace ShareX.ScreenCaptureLib
             }
         }
 
-        internal void DrawRegionArea(Graphics g, Rectangle rect, bool isAnimated)
+        internal void DrawRegionArea(Graphics g, D2DRect rect, bool isAnimated)
         {
-            g.DrawRectangleProper(borderPen, rect);
+            throw new Exception("Cant draw with GDI Object");
+        }
 
-            if (isAnimated)
-            {
-                g.DrawRectangleProper(borderDotPen, rect);
-            }
-            else
-            {
-                g.DrawRectangleProper(borderDotStaticPen, rect);
-            }
+        internal void DrawRegionArea(D2DGraphics g, D2DRect rect, bool isAnimated)
+        {
+            g.DrawRectangleProper(borderColor, rect);
+            g.DrawRectangleProper(isAnimated ? borderDotPen : borderDotStaticPen, rect);
         }
 
         private void CheckFPS()
@@ -954,116 +963,103 @@ namespace ShareX.ScreenCaptureLib
             }
         }
 
-        private void DrawFPS(Graphics g, int offset)
+        private void DrawFPS(D2DGraphics g, int offset)
         {
-            Point textPosition = new Point(offset, offset);
+            var textPosition = new D2DPoint(offset, offset);
 
             if (IsFullscreen)
             {
-                Rectangle rectScreen = CaptureHelpers.GetActiveScreenBounds0Based();
-                textPosition = textPosition.Add(rectScreen.Location);
+                D2DRect rectScreen = CaptureHelpers.GetActiveScreenBounds0Based();
+                textPosition.Offset(rectScreen.Location.x, rectScreen.Location.y);
             }
-
-            g.DrawTextWithShadow(FPS.ToString(), textPosition, infoFontBig, Brushes.White, Brushes.Black, new Point(0, 1));
+            
+            g.DrawTextWithShadow(FPS.ToString(), textPosition, infoFontBig, D2DColor.White, D2DColor.Black, new Point(0, 1));
         }
 
-        private void DrawInfoText(Graphics g, string text, Rectangle rect, Font font, int padding)
+        private void DrawInfoText(D2DGraphics g, string text, D2DRect rect, Font font, D2DPoint padding) => DrawInfoText(g, text, rect, font, padding, textBackgroundColor, textOuterBorderPen, textInnerBorderPen, textColor, textShadowColor);
+        
+        private void DrawInfoText(D2DGraphics g, string text, D2DRect rect, Font font, D2DPoint padding,
+            D2DColor backgroundColor, D2DPen outerBorderPen, D2DPen innerBorderPen, D2DColor textColor, D2DColor textShadowColor)
         {
-            DrawInfoText(g, text, rect, font, new Point(padding, padding));
-        }
-
-        private void DrawInfoText(Graphics g, string text, Rectangle rect, Font font, Point padding)
-        {
-            DrawInfoText(g, text, rect, font, padding, textBackgroundBrush, textOuterBorderPen, textInnerBorderPen, textBrush, textShadowBrush);
-        }
-
-        private void DrawInfoText(Graphics g, string text, Rectangle rect, Font font, int padding,
-            Brush backgroundBrush, Pen outerBorderPen, Pen innerBorderPen, Brush textBrush, Brush textShadowBrush)
-        {
-            DrawInfoText(g, text, rect, font, new Point(padding, padding), backgroundBrush, outerBorderPen, innerBorderPen, textBrush, textShadowBrush);
-        }
-
-        private void DrawInfoText(Graphics g, string text, Rectangle rect, Font font, Point padding,
-            Brush backgroundBrush, Pen outerBorderPen, Pen innerBorderPen, Brush textBrush, Brush textShadowBrush)
-        {
-            g.FillRectangle(backgroundBrush, rect.Offset(-2));
+            var offsetRect = rect.Offset(-2);
+            g.FillRectangle(new D2DRect(offsetRect.X, offsetRect.Y, offsetRect.Width, offsetRect.Height), backgroundColor);
             g.DrawRectangleProper(innerBorderPen, rect.Offset(-1));
             g.DrawRectangleProper(outerBorderPen, rect);
-
-            g.DrawTextWithShadow(text, rect.LocationOffset(padding.X, padding.Y).Location, font, textBrush, textShadowBrush);
+            
+            g.DrawTextWithShadow(text, rect.LocationOffset(padding.x, padding.y).Location, font, textColor, textShadowColor);
         }
 
-        internal void DrawAreaText(Graphics g, string text, Rectangle area)
+        internal void DrawAreaText(D2DGraphics g, string text, D2DRect area)
         {
             int offset = 6;
             int backgroundPadding = 3;
-            Size textSize = g.MeasureString(text, infoFont).ToSize();
-            Point textPos;
+            var textSize = g.MeasureText(text, infoFont.Name, infoFont.Size, new D2DSize(1000, 1000));
+            D2DPoint textPos;
 
-            if (area.Y - offset - textSize.Height - (backgroundPadding * 2) < ClientArea.Y)
+            if (area.Y - offset - textSize.height - (backgroundPadding * 2) < ClientArea.Y)
             {
-                textPos = new Point(area.X + offset + backgroundPadding, area.Y + offset + backgroundPadding);
+                textPos = new D2DPoint(area.X + offset + backgroundPadding, area.Y + offset + backgroundPadding);
             }
             else
             {
-                textPos = new Point(area.X + backgroundPadding, area.Y - offset - backgroundPadding - textSize.Height);
+                textPos = new D2DPoint(area.X + backgroundPadding, area.Y - offset - backgroundPadding - textSize.height);
             }
 
-            if (textPos.X + textSize.Width + backgroundPadding >= ClientArea.Width)
+            if (textPos.x + textSize.width + backgroundPadding >= ClientArea.Width)
             {
-                textPos.X = ClientArea.Width - textSize.Width - backgroundPadding;
+                textPos.x = ClientArea.Width - textSize.width - backgroundPadding;
             }
 
-            Rectangle backgroundRect = new Rectangle(textPos.X - backgroundPadding, textPos.Y - backgroundPadding, textSize.Width + (backgroundPadding * 2), textSize.Height + (backgroundPadding * 2));
+            var backgroundRect = new D2DRect(textPos.x - backgroundPadding, textPos.y - backgroundPadding, textSize.width + (backgroundPadding * 2), textSize.height + (backgroundPadding * 2));
 
-            DrawInfoText(g, text, backgroundRect, infoFont, backgroundPadding);
+            DrawInfoText(g, text, backgroundRect, infoFont, new D2DPoint((float)backgroundPadding, (float)backgroundPadding));
         }
 
-        private void DrawTextAnimation(Graphics g, TextAnimation textAnimation)
+        private void DrawTextAnimation(D2DGraphics g, TextAnimation textAnimation)
         {
-            Size textSize = g.MeasureString(textAnimation.Text, infoFontMedium).ToSize();
+            var textSize = g.MeasureText(textAnimation.Text, infoFontMedium.Name, infoFontMedium.Size, new D2DSize(1000, 1000));
             int padding = 3;
-            textSize.Width += padding * 2;
-            textSize.Height += padding * 2;
-            Rectangle textRectangle = new Rectangle(textAnimation.Position.X, textAnimation.Position.Y, textSize.Width, textSize.Height);
+            textSize.width += padding * 2;
+            textSize.height += padding * 2;
+            var textRectangle = new D2DRect(textAnimation.Position.X, textAnimation.Position.Y, textSize.width, textSize.height);
             DrawTextAnimation(g, textAnimation, textRectangle, padding);
         }
 
-        private void DrawTextAnimation(Graphics g, TextAnimation textAnimation, Rectangle textRectangle, int padding)
+        private void DrawTextAnimation(D2DGraphics g, TextAnimation textAnimation, D2DRect textRectangle, int padding)
         {
-            using (Brush backgroundBrush = new SolidBrush(Color.FromArgb((int)(textAnimation.Opacity * 200), textBackgroundColor)))
-            using (Pen outerBorderPen = new Pen(Color.FromArgb((int)(textAnimation.Opacity * 200), textOuterBorderColor)))
-            using (Pen innerBorderPen = new Pen(Color.FromArgb((int)(textAnimation.Opacity * 200), textInnerBorderColor)))
-            using (Brush textBrush = new SolidBrush(Color.FromArgb((int)(textAnimation.Opacity * 255), textColor)))
-            using (Brush textShadowBrush = new SolidBrush(Color.FromArgb((int)(textAnimation.Opacity * 255), textShadowColor)))
+            var borderOpacity = (float)(textAnimation.Opacity * (200.0f / 255.0f));
+            var textOpacity = (float)textAnimation.Opacity;
+
+            using (var outerBorderPen = Device.CreatePen(new D2DColor(borderOpacity, textOuterBorderColor)))
+            using (var innerBorderPen = Device.CreatePen(new D2DColor(borderOpacity, textInnerBorderColor)))
             {
-                DrawInfoText(g, textAnimation.Text, textRectangle, infoFontMedium, padding, backgroundBrush, outerBorderPen, innerBorderPen, textBrush, textShadowBrush);
+                DrawInfoText(g, textAnimation.Text, textRectangle, infoFontMedium, new D2DPoint(padding, padding), new D2DColor(borderOpacity, textBackgroundColor), outerBorderPen, innerBorderPen, new D2DColor(textOpacity, textColor), new D2DColor(textOpacity, textShadowColor));
             }
         }
 
-        private void DrawBottomTipAnimation(Graphics g, TextAnimation textAnimation)
+        private void DrawBottomTipAnimation(D2DGraphics g, TextAnimation textAnimation)
         {
-            Size textSize = g.MeasureString(textAnimation.Text, infoFontMedium).ToSize();
-            int padding = 5;
-            textSize.Width += padding * 2;
-            textSize.Height += padding * 2;
-            int margin = 20;
-            Rectangle textRectangle = new Rectangle((ClientArea.Width / 2) - (textSize.Width / 2), ClientArea.Height - textSize.Height - margin, textSize.Width, textSize.Height);
+            var textSize = g.MeasureText(textAnimation.Text, infoFontMedium.Name, infoFontMedium.Size, new D2DSize(1000, 1000));
+            var padding = 5;
+            textSize.width += padding * 2;
+            textSize.height += padding * 2;
+            var margin = 20;
+            var textRectangle = new D2DRect((ClientArea.Width / 2) - (textSize.width / 2), ClientArea.Height - textSize.height - margin, textSize.width, textSize.height);
             DrawTextAnimation(g, textAnimation, textRectangle, padding);
         }
 
-        internal string GetAreaText(Rectangle rect)
+        internal string GetAreaText(D2DRect rect)
         {
             if (IsEditorMode)
             {
-                rect = new Rectangle(rect.X - CanvasRectangle.X, rect.Y - CanvasRectangle.Y, rect.Width, rect.Height);
+                rect = new D2DRect(rect.X - CanvasRectangle.X, rect.Y - CanvasRectangle.Y, rect.Width, rect.Height);
             }
             else if (Mode == RegionCaptureMode.Ruler)
             {
-                Point endLocation = new Point(rect.Right - 1, rect.Bottom - 1);
-                string text = $"X: {rect.X} | Y: {rect.Y} | Right: {endLocation.X} | Bottom: {endLocation.Y}\r\n" +
+                var endLocation = new D2DPoint(rect.Width - 1, rect.Height - 1);
+                string text = $"X: {rect.X} | Y: {rect.Y} | Right: {endLocation.x} | Bottom: {endLocation.y}\r\n" +
                     $"Width: {rect.Width} px | Height: {rect.Height} px | Area: {rect.Area()} px | Perimeter: {rect.Perimeter()} px\r\n" +
-                    $"Distance: {MathHelpers.Distance(rect.Location, endLocation):0.00} px | Angle: {MathHelpers.LookAtDegree(rect.Location, endLocation):0.00}°";
+                    $"Distance: {MathHelpers.Distance(new Vector2(rect.Location.x, rect.Location.y), new Vector2(endLocation.x, endLocation.y)):0.00} px | Angle: {MathHelpers.LookAtDegree(new Vector2(rect.Location.x, rect.Location.y), new Vector2(endLocation.x, endLocation.y)):0.00}°";
                 return text;
             }
 
@@ -1074,8 +1070,8 @@ namespace ShareX.ScreenCaptureLib
         {
             if (IsEditorMode)
             {
-                Point canvasRelativePosition = new Point(InputManager.ClientMousePosition.X - CanvasRectangle.X, InputManager.ClientMousePosition.Y - CanvasRectangle.Y);
-                return $"X: {canvasRelativePosition.X} Y: {canvasRelativePosition.Y}";
+                var canvasRelativePosition = new D2DPoint(InputManager.ClientMousePosition.X - CanvasRectangle.X, InputManager.ClientMousePosition.Y - CanvasRectangle.Y);
+                return $"X: {canvasRelativePosition.x} Y: {canvasRelativePosition.y}";
             }
             else if (Mode == RegionCaptureMode.ScreenColorPicker || Options.UseCustomInfoText)
             {
@@ -1099,41 +1095,41 @@ namespace ShareX.ScreenCaptureLib
             return $"X: {CurrentPosition.X} Y: {CurrentPosition.Y}";
         }
 
-        private void DrawCrosshair(Graphics g)
+        private void DrawCrosshair(D2DGraphics g)
         {
             int offset = 5;
-            Point mousePos = InputManager.ClientMousePosition;
-            Point left = new Point(mousePos.X - offset, mousePos.Y), left2 = new Point(0, mousePos.Y);
-            Point right = new Point(mousePos.X + offset, mousePos.Y), right2 = new Point(ClientArea.Width - 1, mousePos.Y);
-            Point top = new Point(mousePos.X, mousePos.Y - offset), top2 = new Point(mousePos.X, 0);
-            Point bottom = new Point(mousePos.X, mousePos.Y + offset), bottom2 = new Point(mousePos.X, ClientArea.Height - 1);
+            D2DPoint mousePos = InputManager.ClientMousePosition;
+            D2DPoint left = new D2DPoint(mousePos.x - offset, mousePos.y), left2 = new D2DPoint(0, mousePos.y);
+            D2DPoint right = new D2DPoint(mousePos.x + offset, mousePos.y), right2 = new D2DPoint(ClientArea.Width - 1, mousePos.y);
+            D2DPoint top = new D2DPoint(mousePos.x, mousePos.y - offset), top2 = new D2DPoint(mousePos.x, 0);
+            D2DPoint bottom = new D2DPoint(mousePos.x, mousePos.y + offset), bottom2 = new D2DPoint(mousePos.x, ClientArea.Height - 1);
 
-            if (left.X - left2.X > 10)
+            if (left.x - left2.x > 10)
             {
-                g.DrawLine(borderPen, left, left2);
-                g.DrawLine(borderDotPen, left, left2);
+                g.DrawLine(left, left2, borderColor);
+                g.DrawLine(left, left2, borderDotColor, dashStyle: D2DDashStyle.Dot);
             }
 
-            if (right2.X - right.X > 10)
+            if (right2.x - right.x > 10)
             {
-                g.DrawLine(borderPen, right, right2);
-                g.DrawLine(borderDotPen, right, right2);
+                g.DrawLine(right, right2, borderColor);
+                g.DrawLine(right, right2, borderDotColor, dashStyle: D2DDashStyle.Dot);
             }
 
-            if (top.Y - top2.Y > 10)
+            if (top.y - top2.y > 10)
             {
-                g.DrawLine(borderPen, top, top2);
-                g.DrawLine(borderDotPen, top, top2);
+                g.DrawLine(top, top2, borderColor);
+                g.DrawLine(top, top2, borderDotColor, dashStyle: D2DDashStyle.Dot);
             }
 
-            if (bottom2.Y - bottom.Y > 10)
+            if (bottom2.y - bottom.y > 10)
             {
-                g.DrawLine(borderPen, bottom, bottom2);
-                g.DrawLine(borderDotPen, bottom, bottom2);
+                g.DrawLine(bottom, bottom2, borderColor);
+                g.DrawLine(bottom, bottom2, borderDotColor, dashStyle: D2DDashStyle.Dot);
             }
         }
 
-        private void DrawCursorGraphics(Graphics g)
+        private void DrawCursorGraphics(D2DGraphics g)
         {
             Point mousePos = InputManager.ClientMousePosition;
             Rectangle currentScreenRect0Based = CaptureHelpers.GetActiveScreenBounds0Based();
@@ -1167,8 +1163,8 @@ namespace ShareX.ScreenCaptureLib
 
                 CurrentPosition = InputManager.MousePosition;
                 infoText = GetInfoText();
-                Size textSize = g.MeasureString(infoText, infoFont).ToSize();
-                infoTextRect.Size = new Size(textSize.Width + (infoTextPadding * 2), textSize.Height + (infoTextPadding * 2));
+                var textSize = g.MeasureText(infoText, infoFont.Name, infoFont.Size, new D2DSize(1000, 1000));
+                infoTextRect.Size = (Size)new D2DSize(textSize.width + (infoTextPadding * 2), textSize.height + (infoTextPadding * 2));
                 totalSize.Width = Math.Max(totalSize.Width, infoTextRect.Width);
 
                 totalSize.Height += infoTextRect.Height;
@@ -1191,23 +1187,29 @@ namespace ShareX.ScreenCaptureLib
 
             if (Options.ShowMagnifier)
             {
-                using (GraphicsQualityManager quality = new GraphicsQualityManager(g))
-                using (TextureBrush brush = new TextureBrush(magnifier))
+                if (Options.UseSquareMagnifier)
                 {
-                    brush.TranslateTransform(x, y + magnifierPosition);
+                    g.DrawBitmap(magnifier, new D2DRect(x, y+magnifierPosition, magnifier.Width, magnifier.Height));
+                    g.DrawRectangleProper(D2DColor.White, new D2DRect(x - 1, y + magnifierPosition - 1, magnifier.Width + 2, magnifier.Height + 2));
+                    g.DrawRectangleProper(D2DColor.Black, new D2DRect(x, y + magnifierPosition, magnifier.Width, magnifier.Height));
+                }
+                else
+                {
+                    var roundedMagnifier = new Bitmap(magnifier.Width + 2, magnifier.Height + 2, PixelFormat.Format32bppArgb);
+                    using (var gdiGraphics = Graphics.FromImage(roundedMagnifier))
+                    using (GraphicsQualityManager quality = new GraphicsQualityManager(gdiGraphics))
+                    using (var brush = new TextureBrush(magnifier))
+                    {
+                        quality.SetHighQuality();
+                        gdiGraphics.FillEllipse(brush, 1, 1, magnifier.Width, magnifier.Height);
+                        gdiGraphics.DrawEllipse(Pens.White, 0, 0, magnifier.Width + 2 - 1, magnifier.Height + 2 - 1);
+                        gdiGraphics.DrawEllipse(Pens.Black, 1, 1, magnifier.Width - 1, magnifier.Height - 1);
+                        gdiGraphics.Flush();
+                        g.DrawBitmap(roundedMagnifier, new D2DRect(x, y + magnifierPosition, magnifier.Width, magnifier.Height), alpha: true);
+                    }
 
-                    if (Options.UseSquareMagnifier)
-                    {
-                        g.FillRectangle(brush, x, y + magnifierPosition, magnifier.Width, magnifier.Height);
-                        g.DrawRectangleProper(Pens.White, x - 1, y + magnifierPosition - 1, magnifier.Width + 2, magnifier.Height + 2);
-                        g.DrawRectangleProper(Pens.Black, x, y + magnifierPosition, magnifier.Width, magnifier.Height);
-                    }
-                    else
-                    {
-                        g.FillEllipse(brush, x, y + magnifierPosition, magnifier.Width, magnifier.Height);
-                        g.DrawEllipse(Pens.White, x - 1, y + magnifierPosition - 1, magnifier.Width + 2 - 1, magnifier.Height + 2 - 1);
-                        g.DrawEllipse(Pens.Black, x, y + magnifierPosition, magnifier.Width - 1, magnifier.Height - 1);
-                    }
+                    //g.DrawEllipse(x - 1, y + magnifierPosition - 1, magnifier.Width + 2 - 1, magnifier.Height + 2 - 1, D2DColor.White);
+                    //g.DrawEllipse(x, y + magnifierPosition, magnifier.Width - 1, magnifier.Height - 1, D2DColor.Black);
                 }
             }
 
@@ -1223,16 +1225,14 @@ namespace ShareX.ScreenCaptureLib
                     infoTextRect.Location = new Point(x + (totalSize.Width / 2) - (infoTextRect.Width / 2), y + infoTextPosition);
                     Point padding = new Point(infoTextPadding + colorBoxExtraWidth, infoTextPadding);
 
-                    Rectangle colorRect = new Rectangle(infoTextRect.X + colorBoxOffset, infoTextRect.Y + colorBoxOffset, colorBoxSize, colorBoxSize);
+                    var colorRect = new D2DRect(infoTextRect.X + colorBoxOffset, infoTextRect.Y + colorBoxOffset, colorBoxSize, colorBoxSize);
 
                     DrawInfoText(g, infoText, infoTextRect, infoFont, padding);
 
-                    using (Brush colorBrush = new SolidBrush(ShapeManager.GetCurrentColor()))
-                    {
-                        g.FillRectangle(colorBrush, colorRect);
-                    }
-
-                    g.DrawLine(textInnerBorderPen, colorRect.Right, colorRect.Top, colorRect.Right, colorRect.Bottom - 1);
+                    var shapeManagerColor = ShapeManager.GetCurrentColor();
+                    g.FillRectangle(colorRect, shapeManagerColor.ToD2DColor());
+                    Graphics gg;
+                    g.DrawLine(colorRect.Width, colorRect.Y, colorRect.Width, colorRect.Height - 1, textInnerBorderColor);
                 }
                 else
                 {
@@ -1256,16 +1256,16 @@ namespace ShareX.ScreenCaptureLib
                 pixelSize = 10;
             }
 
-            int width = horizontalPixelCount * pixelSize;
-            int height = verticalPixelCount * pixelSize;
-            Bitmap bmp = new Bitmap(width - 1, height - 1);
-
+            var width = horizontalPixelCount * pixelSize;
+            var height = verticalPixelCount * pixelSize;
+            var bmp = new Bitmap(width - 1, height - 1);
+            
             using (Graphics g = Graphics.FromImage(bmp))
             {
                 g.InterpolationMode = InterpolationMode.NearestNeighbor;
                 g.PixelOffsetMode = PixelOffsetMode.Half;
 
-                g.DrawImage(img, new Rectangle(0, 0, width, height), new Rectangle(position.X - (horizontalPixelCount / 2) - CanvasRectangle.X,
+                g.DrawImage(img, new D2DRect(0, 0, width, height), new D2DRect(position.X - (horizontalPixelCount / 2) - CanvasRectangle.X,
                     position.Y - (verticalPixelCount / 2) - CanvasRectangle.Y, horizontalPixelCount, verticalPixelCount), GraphicsUnit.Pixel);
 
                 g.PixelOffsetMode = PixelOffsetMode.None;
@@ -1302,20 +1302,20 @@ namespace ShareX.ScreenCaptureLib
             return bmp;
         }
 
-        private void DrawRuler(Graphics g, Rectangle rect, Pen pen, int rulerSize, int rulerWidth)
+        private void DrawRuler(D2DGraphics g, Rectangle rect, D2DColor color, int rulerSize, int rulerWidth)
         {
             if (rect.Width >= rulerSize && rect.Height >= rulerSize)
             {
                 for (int x = 1; x <= rect.Width / rulerWidth; x++)
                 {
-                    g.DrawLine(pen, new Point(rect.X + (x * rulerWidth), rect.Y), new Point(rect.X + (x * rulerWidth), rect.Y + rulerSize));
-                    g.DrawLine(pen, new Point(rect.X + (x * rulerWidth), rect.Bottom), new Point(rect.X + (x * rulerWidth), rect.Bottom - rulerSize));
+                    g.DrawLine(new Point(rect.X + (x * rulerWidth), rect.Y), new Point(rect.X + (x * rulerWidth), rect.Y + rulerSize), color);
+                    g.DrawLine(new Point(rect.X + (x * rulerWidth), rect.Bottom), new Point(rect.X + (x * rulerWidth), rect.Bottom - rulerSize), color);
                 }
 
                 for (int y = 1; y <= rect.Height / rulerWidth; y++)
                 {
-                    g.DrawLine(pen, new Point(rect.X, rect.Y + (y * rulerWidth)), new Point(rect.X + rulerSize, rect.Y + (y * rulerWidth)));
-                    g.DrawLine(pen, new Point(rect.Right, rect.Y + (y * rulerWidth)), new Point(rect.Right - rulerSize, rect.Y + (y * rulerWidth)));
+                    g.DrawLine(new Point(rect.X, rect.Y + (y * rulerWidth)), new Point(rect.X + rulerSize, rect.Y + (y * rulerWidth)), color);
+                    g.DrawLine(new Point(rect.Right, rect.Y + (y * rulerWidth)), new Point(rect.Right - rulerSize, rect.Y + (y * rulerWidth)), color);
                 }
             }
         }
@@ -1353,7 +1353,7 @@ namespace ShareX.ScreenCaptureLib
         {
             if (IsEditorMode)
             {
-                return ShapeManager.RenderOutputImage(Canvas, CanvasRectangle.Location);
+                return ShapeManager.RenderOutputImage(Canvas, (Point)CanvasRectangle.Location);
             }
             else if (Result == RegionResult.Region || Result == RegionResult.LastRegion)
             {
@@ -1494,16 +1494,11 @@ namespace ShareX.ScreenCaptureLib
 
             ShapeManager?.Dispose();
             backgroundBrush?.Dispose();
-            backgroundHighlightBrush?.Dispose();
-            borderPen?.Dispose();
             borderDotPen?.Dispose();
             borderDotStaticPen?.Dispose();
             infoFont?.Dispose();
             infoFontMedium?.Dispose();
             infoFontBig?.Dispose();
-            textBrush?.Dispose();
-            textShadowBrush?.Dispose();
-            textBackgroundBrush?.Dispose();
             textOuterBorderPen?.Dispose();
             textInnerBorderPen?.Dispose();
             markerPen?.Dispose();

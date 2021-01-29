@@ -1,0 +1,4 @@
+﻿SetThreadDpiAwarenessContext
+GetThreadDpiAwarenessContext
+SetUnitMode
+GetClientRect

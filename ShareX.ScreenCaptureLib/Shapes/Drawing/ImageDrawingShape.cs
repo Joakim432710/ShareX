@@ -26,6 +26,7 @@
 using ShareX.HelpersLib;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -33,12 +34,12 @@ namespace ShareX.ScreenCaptureLib
     {
         public override ShapeType ShapeType { get; } = ShapeType.DrawingImage;
 
-        public Image Image { get; protected set; }
+        public Bitmap Image { get; protected set; }
         public ImageInterpolationMode ImageInterpolationMode { get; protected set; }
 
         public override BaseShape Duplicate()
         {
-            Image imageTemp = Image;
+            var imageTemp = Image;
             Image = null;
             ImageDrawingShape shape = (ImageDrawingShape)base.Duplicate();
             shape.Image = imageTemp.CloneSafe();
@@ -56,7 +57,7 @@ namespace ShareX.ScreenCaptureLib
             AnnotationOptions.ImageInterpolationMode = ImageInterpolationMode;
         }
 
-        public void SetImage(Image img, bool centerImage)
+        public void SetImage(Bitmap img, bool centerImage)
         {
             Dispose();
 
@@ -85,6 +86,11 @@ namespace ShareX.ScreenCaptureLib
             DrawImage(g);
         }
 
+        public override void OnDraw(D2DGraphics g)
+        {
+            DrawImage(g);
+        }
+
         protected void DrawImage(Graphics g)
         {
             if (Image != null)
@@ -96,6 +102,14 @@ namespace ShareX.ScreenCaptureLib
 
                 g.PixelOffsetMode = PixelOffsetMode.Default;
                 g.InterpolationMode = InterpolationMode.Bilinear;
+            }
+        }
+
+        protected void DrawImage(D2DGraphics g)
+        {
+            if (Image != null)
+            {
+                g.DrawGDIBitmap(Image.GetHbitmap(), Rectangle, new D2DRect(0, 0, Image.Width, Image.Height));
             }
         }
 

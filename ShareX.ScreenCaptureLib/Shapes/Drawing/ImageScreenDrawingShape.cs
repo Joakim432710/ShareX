@@ -24,6 +24,7 @@
 #endregion License Information (GPL v3)
 
 using System.Drawing;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -50,6 +51,21 @@ namespace ShareX.ScreenCaptureLib
         }
 
         public override void OnDraw(Graphics g)
+        {
+            if (Image == null)
+            {
+                if (IsValidShape)
+                {
+                    Manager.DrawRegionArea(g, RectangleInsideCanvas, true);
+                }
+            }
+            else
+            {
+                base.OnDraw(g);
+            }
+        }
+
+        public override void OnDraw(D2DGraphics g)
         {
             if (Image == null)
             {

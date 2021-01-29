@@ -26,6 +26,7 @@
 using ShareX.HelpersLib;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -48,6 +49,11 @@ namespace ShareX.ScreenCaptureLib
         }
 
         public override void OnDraw(Graphics g)
+        {
+            DrawRectangle(g);
+        }
+
+        public override void OnDraw(D2DGraphics g)
         {
             DrawRectangle(g);
         }
@@ -112,6 +118,35 @@ namespace ShareX.ScreenCaptureLib
         public override void OnShapePathRequested(GraphicsPath gp, Rectangle rect)
         {
             gp.AddRoundedRectangle(rect, CornerRadius);
+        }
+
+        protected void DrawRectangle(D2DGraphics g)
+        {
+            if (Shadow)
+            {
+                if (IsBorderVisible)
+                {
+                    DrawRectangle(g, ShadowColor, BorderSize, BorderStyle, Color.Transparent, Rectangle.LocationOffset(ShadowOffset), CornerRadius);
+                }
+                else if (FillColor.A == 255)
+                {
+                    DrawRectangle(g, Color.Transparent, 0, BorderStyle, ShadowColor, Rectangle.LocationOffset(ShadowOffset), CornerRadius);
+                }
+            }
+
+            DrawRectangle(g, BorderColor, BorderSize, BorderStyle, FillColor, Rectangle, CornerRadius);
+        }
+
+        protected void DrawRectangle(D2DGraphics g, Color borderColor, int borderSize, BorderStyle borderStyle, Color fillColor, Rectangle rect, int cornerRadius)
+        {
+            var roundedRect = new D2DRoundedRect
+            {
+                rect = rect,
+                radiusX = cornerRadius,
+                radiusY = cornerRadius
+            };
+
+            g.DrawRoundedRectangle(roundedRect, borderColor.ToD2DColor(), fillColor.ToD2DColor(), borderSize);
         }
     }
 }

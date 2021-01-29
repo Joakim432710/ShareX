@@ -36,6 +36,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using unvell.D2DLib;
 using Encoder = System.Drawing.Imaging.Encoder;
 
 namespace ShareX.HelpersLib
@@ -173,14 +174,34 @@ namespace ShareX.HelpersLib
             return new Rectangle(rect.X - offset, rect.Y - offset, rect.Width + (offset * 2), rect.Height + (offset * 2));
         }
 
+        public static D2DRect Offset(this D2DRect rect, int offset)
+        {
+            return new D2DRect(rect.X - offset, rect.Y - offset, rect.Width + (offset * 2), rect.Height + (offset * 2));
+        }
+
         public static Rectangle LocationOffset(this Rectangle rect, int x, int y)
         {
             return new Rectangle(rect.X + x, rect.Y + y, rect.Width, rect.Height);
         }
 
+        public static D2DRect LocationOffset(this D2DRect rect, float x, float y)
+        {
+            return new D2DRect(rect.X + x, rect.Y + y, rect.Width, rect.Height);
+        }
+
+        public static D2DRect LocationOffset(this D2DRect rect, Point offset)
+        {
+            return rect.LocationOffset(offset.X, offset.Y);
+        }
+
         public static Rectangle LocationOffset(this Rectangle rect, Point offset)
         {
             return rect.LocationOffset(offset.X, offset.Y);
+        }
+
+        public static D2DRect LocationOffset(this D2DRect rect, int offset)
+        {
+            return rect.LocationOffset(offset, offset);
         }
 
         public static Rectangle LocationOffset(this Rectangle rect, int offset)
@@ -661,7 +682,27 @@ namespace ShareX.HelpersLib
             return rect.Width * rect.Height;
         }
 
+        public static float Area(this RectangleF rect)
+        {
+            return rect.Width * rect.Height;
+        }
+
+        public static float Area(this D2DRect rect)
+        {
+            return rect.Width * rect.Height;
+        }
+
         public static int Perimeter(this Rectangle rect)
+        {
+            return 2 * (rect.Width + rect.Height);
+        }
+
+        public static float Perimeter(this RectangleF rect)
+        {
+            return 2 * (rect.Width + rect.Height);
+        }
+
+        public static float Perimeter(this D2DRect rect)
         {
             return 2 * (rect.Width + rect.Height);
         }

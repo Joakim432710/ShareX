@@ -27,6 +27,7 @@ using ShareX.HelpersLib;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Threading.Tasks;
+using unvell.D2DLib;
 
 namespace ShareX.ScreenCaptureLib
 {
@@ -78,7 +79,28 @@ namespace ShareX.ScreenCaptureLib
             }
         }
 
+        public virtual void OnDraw(D2DGraphics g)
+        {
+            if (drawCache && isEffectCaching)
+            {
+                OnDrawOverlay(g, "Processing...");
+            }
+            else if (drawCache && cachedEffect != null)
+            {
+                g.DrawGDIBitmap(cachedEffect.GetHbitmap(), RectangleInsideCanvas, new D2DRect(0, 0, cachedEffect.Width, cachedEffect.Height), 1f, true);
+            }
+            else
+            {
+                OnDrawOverlay(g);
+            }
+        }
+
         public virtual void OnDrawOverlay(Graphics g)
+        {
+            OnDrawOverlay(g, OverlayText);
+        }
+
+        public virtual void OnDrawOverlay(D2DGraphics g)
         {
             OnDrawOverlay(g, OverlayText);
         }
@@ -102,6 +124,23 @@ namespace ShareX.ScreenCaptureLib
                     {
                         g.DrawString(overlayText, font, Brushes.White, Rectangle, sf);
                     }
+                }
+            }
+        }
+
+        public void OnDrawOverlay(D2DGraphics g, string overlayText)
+        {
+            g.FillRectangle(Rectangle, new D2DColor(150f/255f, D2DColor.Black));
+
+            g.DrawCornerLines(Rectangle.Offset(1), D2DColor.White, 25);
+
+            using (Font font = new Font("Verdana", 12))
+            {
+                var textSize = g.MeasureText(overlayText, font.Name, font.Size, new D2DSize(1000, 1000));
+
+                if (Rectangle.Width > textSize.width && Rectangle.Height > textSize.height)
+                {
+                    g.DrawTextCenter(overlayText, D2DColor.White, font.Name, font.Size, Rectangle);
                 }
             }
         }
